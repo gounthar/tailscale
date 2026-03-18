@@ -410,6 +410,8 @@ type LocalBackend struct {
 	// getCertForTest is used to retrieve TLS certificates in tests.
 	// See [LocalBackend.ConfigureCertsForTest].
 	getCertForTest func(hostname string) (*TLSCertKeyPair, error)
+
+	authReconfigWaiter atomic.Bool
 }
 
 // SetHardwareAttested enables hardware attestation key signatures in map
@@ -1020,10 +1022,10 @@ func (b *LocalBackend) linkChange(delta *netmon.ChangeDelta) {
 		case ipn.NoState, ipn.Stopped:
 			// Do nothing.
 		default:
-			// TODO(raggi,tailscale/corp#22574): authReconfig should be refactored such that we can call the
+			// TODO(raggi,tailscale/corp#22574): AuthReconfig should be refactored such that we can call the
 			// necessary operations here and avoid the need for asynchronous behavior that is racy and hard
 			// to test here, and do less extra work in these conditions.
-			b.goTracker.Go(b.authReconfig)
+			b.goTracker.Go(b.AuthReconfig)
 		}
 	}
 
@@ -4931,7 +4933,7 @@ func (b *LocalBackend) isEngineBlocked() bool {
 
 // blockEngineUpdatesLocked sets b.blocked to block.
 //
-// Its indirect effect is to turn b.authReconfig() into a no-op if block is
+// Its indirect effect is to turn b.AuthReconfig() into a no-op if block is
 // true.
 //
 // b.mu must be held.
@@ -5044,12 +5046,18 @@ func (b *LocalBackend) readvertiseAppConnectorRoutes() {
 	}
 }
 
-// authReconfig pushes a new configuration into wgengine, if engine
+// AuthReconfig pushes a new configuration into wgengine, if engine
 // updates are not currently blocked, based on the cached netmap and
 // user prefs.
-func (b *LocalBackend) authReconfig() {
+func (b *LocalBackend) AuthReconfig() {
+	if b.authReconfigWaiter.Swap(true) {
+		return
+	}
+
 	b.mu.Lock()
 	defer b.mu.Unlock()
+
+	b.authReconfigWaiter.Store(false)
 	b.authReconfigLocked()
 }
 
@@ -5336,7 +5344,7 @@ func (b *LocalBackend) initPeerAPIListenerLocked() {
 	cn := b.currentNode()
 	nm := cn.NetMap()
 	if nm == nil {
-		// We're called from authReconfig which checks that
+		// We're called from authReconfigLocked which checks that
 		// netMap is non-nil, but if a concurrent Logout,
 		// ResetForClientDisconnect, or Start happens when its
 		// mutex was released, the netMap could be
@@ -5765,7 +5773,7 @@ func (b *LocalBackend) enterStateLocked(newState ipn.State) {
 	case ipn.NeedsLogin:
 		feature.SystemdStatus("Needs login: %s", authURL)
 		// always block updates on NeedsLogin even if seamless renewal is enabled,
-		// to prevent calls to authReconfig from reconfiguring the engine when our
+		// to prevent calls to authReconfigLocked from reconfiguring the engine when our
 		// key has expired and we're waiting to authenticate to use the new key.
 		b.blockEngineUpdatesLocked(true)
 		fallthrough

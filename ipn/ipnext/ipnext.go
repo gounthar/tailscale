@@ -204,6 +204,9 @@ type Host interface {
 	// NodeBackend returns the [NodeBackend] for the currently active node
 	// (which is approximately the same as the current profile).
 	NodeBackend() NodeBackend
+
+	// AuthReconfigAsync pushes a new configuration into wgengine.
+	AuthReconfigAsync()
 }
 
 // SafeBackend is a subset of the [ipnlocal.LocalBackend] type's methods that

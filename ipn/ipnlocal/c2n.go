@@ -319,7 +319,7 @@ func handleC2NSetNetfilterKind(b *LocalBackend, w http.ResponseWriter, r *http.R
 		return
 	}
 
-	b.authReconfig()
+	b.AuthReconfig()
 
 	w.WriteHeader(http.StatusNoContent)
 }

@@ -1,0 +1,36 @@
+name: Alt Arch Riscv64
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  build:
+    name: Build Tailscale (riscv64)
+    runs-on: ubuntu-24.04-riscv
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version: stable
+          cache: false
+
+      - name: Build
+        run: |
+          go version
+          time go build -o tailscale-bin ./cmd/tailscale
+          time go build -o tailscaled-bin ./cmd/tailscaled
+
+      - name: Verify
+        run: |
+          ./tailscale-bin version
+          ./tailscaled-bin --version
+          file tailscale-bin tailscaled-bin
